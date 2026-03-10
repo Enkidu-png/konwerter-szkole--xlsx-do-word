@@ -1,0 +1,5 @@
+{
+  "name": "Konwerter Szkoleń XLSX do Word",
+  "description": "Aplikacja do importu bazy szkoleń z XLSX i eksportu opisów do formatu Word/RTF.",
+  "requestFramePermissions": []
+}

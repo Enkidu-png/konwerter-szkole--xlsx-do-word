@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "WebSearch",
+      "WebFetch(domain:docxtemplater.com)",
+      "WebFetch(domain:www.npmjs.com)"
+    ]
+  }
+}
