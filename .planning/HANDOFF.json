@@ -1,0 +1,93 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-03-24T12:19:55.030Z",
+  "phase": "ad-hoc",
+  "phase_name": "Footer selection feature",
+  "phase_dir": null,
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Split Stopki.docx into 3 per-person footer files",
+      "status": "done",
+      "notes": "Used PizZip + node script to split by XML section boundaries. Created Stopka_jagienka.docx (Jagienka Pieprzowska), Stopka_alicja.docx (Alicja Kozłowska), Stopka_agata.docx (Agata Truszkowska)."
+    },
+    {
+      "id": 2,
+      "name": "Create public/ directory with template + footer files",
+      "status": "done",
+      "notes": "Copied SZABLON2.docx + 3 Stopka_*.docx into public/ so Vite can serve them."
+    },
+    {
+      "id": 3,
+      "name": "Implement appendFooterToZip() in App.tsx",
+      "status": "done",
+      "notes": "Merges footer docx body as a new Word section. Remaps rIds (prefix rIdFtr_), copies images into main zip, adds hyperlink rels. Converts main doc's final sectPr into section-break paragraph so footer gets its own page."
+    },
+    {
+      "id": 4,
+      "name": "Add selectedFooter state + FooterSelector UI",
+      "status": "done",
+      "notes": "Toggle buttons (Jagienka/Alicja/Agata), shown in preview header AND batch toolbar. All 3 export buttons (single, batch zip, merged offer) disabled until footer selected."
+    },
+    {
+      "id": 5,
+      "name": "Wire footer into all 3 export functions",
+      "status": "done",
+      "notes": "downloadWord, downloadBatch, downloadMergedOffer all now call loadFooterBuffer(selectedFooter) before generating. generateDocxBlob and generateMergedOfferBlob accept footerBuffer param."
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 6,
+      "name": "Browser test: verify footer page renders correctly in Word",
+      "status": "not_started",
+      "notes": "Run npm run dev, upload baza danych.xlsx, select a product, pick a footer, download and open in Word. Check that the footer person's photo + contact info appears on page 2."
+    },
+    {
+      "id": 7,
+      "name": "Browser test: batch export and merged offer with footer",
+      "status": "not_started",
+      "notes": "Select multiple products, pick footer, export both ways. Verify each docx in the zip has the footer page."
+    }
+  ],
+  "blockers": [],
+  "human_actions_pending": [
+    {
+      "action": "Test the generated .docx files in Microsoft Word",
+      "context": "The appendFooterToZip logic manipulates XML directly — needs visual verification that the footer page appears correctly with photo, text, and layout intact.",
+      "blocking": true
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Identified 3 persons from Stopki.docx: Jagienka Pieprzowska, Alicja Kozłowska, Agata Truszkowska (NOT Kasia — user said 'kasia etc' but Stopki.docx has these 3)",
+      "rationale": "User confirmed the 3 pages from Stopki.docx are the source of truth.",
+      "phase": "ad-hoc"
+    },
+    {
+      "decision": "Footer merge uses direct XML section insertion (not altChunk)",
+      "rationale": "The footer docx contains real Word content with images — HTML altChunk would lose formatting. Direct XML sectPr splitting preserves all formatting.",
+      "phase": "ad-hoc"
+    },
+    {
+      "decision": "selectedFooter state is global (single selection for all exports in a session)",
+      "rationale": "User wants one footer choice that applies to everything — cleaner UX than per-export selection.",
+      "phase": "ad-hoc"
+    }
+  ],
+  "uncommitted_files": [
+    "src/App.tsx",
+    ".claude/settings.local.json",
+    "Stopka_jagienka.docx",
+    "Stopka_alicja.docx",
+    "Stopka_agata.docx",
+    "Stopki.docx (source, likely not needed in git)",
+    "public/ (new dir with SZABLON2.docx + 3 Stopka_*.docx)"
+  ],
+  "next_action": "Run `npm run dev`, upload baza danych.xlsx, select product, pick Jagienka, click Pobierz Word (.docx), open in Word and verify footer page 2 shows Jagienka's photo and contact info.",
+  "context_notes": "The appendFooterToZip function is the critical piece. It finds all r:embed and r:id refs in the footer body, remaps them to rIdFtr_{original} in both the body XML and the main zip rels, copies media files. Then it converts the main doc's final <w:sectPr> into a section-break paragraph so the footer body (ending with its own sectPr) becomes the last section. Not yet browser-tested."
+}
