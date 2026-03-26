@@ -6,3 +6,20 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Data files
+*.xlsx
+*.xls
+*.docx
+~$*
+
+# Local artifacts
+.playwright-mcp/
+verify-*.png
+lead-qualification-tools-report.md
+public/
+docs/superpowers/
+
+# Claude local
+.claude/settings.local.json
+.claude/agents/
