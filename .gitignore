@@ -10,14 +10,14 @@ coverage/
 # Data files
 *.xlsx
 *.xls
-*.docx
+# *.docx — stopki are tracked
 ~$*
 
 # Local artifacts
 .playwright-mcp/
 verify-*.png
 lead-qualification-tools-report.md
-public/
+# public/ — stopki in public/ are tracked
 docs/superpowers/
 
 # Claude local
