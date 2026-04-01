@@ -1,15 +1,11 @@
-# launch.ps1 — Launcher for Konwerter Szkolen
-# Opens "baza danych.xlsx" from Desktop, refreshes CRM data, starts local HTTP server, opens browser.
+# launch.ps1 — Silent launcher for Konwerter Szkolen
+# Opens "baza danych.xlsx" (Excel auto-refreshes), starts hidden HTTP server, opens browser.
 
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-
-# --- Configuration ---
 $distPath = Join-Path $PSScriptRoot "dist"
-$xlsxFileName = "baza danych.xlsx"
-$xlsxPath = Join-Path $PSScriptRoot $xlsxFileName
+$indexPath = Join-Path $distPath "index.html"
+$xlsxPath = Join-Path $PSScriptRoot "baza danych.xlsx"
 $portCandidates = @(3000, 3001, 3002, 3003, 3004)
 
-# --- MIME Types ---
 $mimeTypes = @{
     ".html"  = "text/html; charset=utf-8"
     ".htm"   = "text/html; charset=utf-8"
@@ -30,37 +26,27 @@ $mimeTypes = @{
 }
 
 function Get-MimeType($extension) {
-    if ($mimeTypes.ContainsKey($extension)) {
-        return $mimeTypes[$extension]
-    }
+    if ($mimeTypes.ContainsKey($extension)) { return $mimeTypes[$extension] }
     return "application/octet-stream"
 }
 
-# --- Banner ---
-Write-Host ""
-Write-Host "  ======================================" -ForegroundColor Cyan
-Write-Host "    Konwerter Szkolen - Uruchamianie" -ForegroundColor Cyan
-Write-Host "  ======================================" -ForegroundColor Cyan
-Write-Host ""
-
-# --- Step 1: Validate dist/ ---
-$indexPath = Join-Path $distPath "index.html"
+# --- Validate dist/ ---
 if (-not (Test-Path $indexPath)) {
-    Write-Host "  BLAD: Folder dist/ nie istnieje lub jest pusty." -ForegroundColor Red
-    Write-Host "  Skontaktuj sie z administratorem." -ForegroundColor Red
-    Write-Host ""
-    Read-Host "  Nacisnij Enter aby zamknac"
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.MessageBox]::Show(
+        "Folder dist/ nie istnieje.`nSkontaktuj sie z administratorem.",
+        "Konwerter Szkolen - Blad",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Error
+    ) | Out-Null
     exit 1
 }
 
-# --- Step 2: Excel — open and refresh ---
-Write-Host "  [1/3] Otwieram baze danych w Excel..." -ForegroundColor Yellow
-
-if (-not (Test-Path $xlsxPath)) {
-    Write-Host "  Nie znaleziono '$xlsxFileName' w folderze aplikacji." -ForegroundColor DarkYellow
-    Write-Host "  Otwieram okno wyboru pliku..." -ForegroundColor Yellow
-    Write-Host ""
-
+# --- Open Excel file (Excel auto-refreshes on open) ---
+if (Test-Path $xlsxPath) {
+    Start-Process $xlsxPath
+} else {
+    # File not in folder — show file picker
     Add-Type -AssemblyName System.Windows.Forms
     $dialog = New-Object System.Windows.Forms.OpenFileDialog
     $dialog.Title = "Wybierz plik bazy danych Excel"
@@ -68,143 +54,76 @@ if (-not (Test-Path $xlsxPath)) {
     $dialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
 
     if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $xlsxPath = $dialog.FileName
-    } else {
-        Write-Host "  Nie wybrano pliku. Pomijam odswiezanie bazy." -ForegroundColor DarkYellow
-        Write-Host ""
-        $xlsxPath = $null
+        Start-Process $dialog.FileName
     }
 }
 
-if ($xlsxPath -and (Test-Path $xlsxPath)) {
-    try {
-        $excel = New-Object -ComObject Excel.Application -ErrorAction Stop
-        $excel.Visible = $true
-        $excel.DisplayAlerts = $false
-
-        try {
-            $workbook = $excel.Workbooks.Open($xlsxPath)
-            Write-Host "  Plik otwarty. Odswiezam dane z CRM..." -ForegroundColor Green
-
-            $workbook.RefreshAll()
-
-            # Wait for async queries to finish
-            try {
-                $excel.CalculateUntilAsyncQueriesDone()
-            } catch {
-                Start-Sleep -Seconds 3
-            }
-
-            Write-Host "  Odswiezanie zakonczone." -ForegroundColor Green
-            Write-Host "  Jesli pojawilo sie okno logowania, wypelnij dane w Excel." -ForegroundColor Yellow
-            Write-Host ""
-        } catch {
-            Write-Host "  Uwaga: Plik moze byc juz otwarty w Excel." -ForegroundColor DarkYellow
-            Write-Host "         Sprawdz czy Excel jest aktywny." -ForegroundColor DarkYellow
-            Write-Host ""
-        }
-
-        # Release COM references but do NOT quit Excel
-        if ($workbook) {
-            [System.Runtime.InteropServices.Marshal]::ReleaseComObject($workbook) | Out-Null
-        }
-        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
-        $workbook = $null
-        $excel = $null
-    } catch {
-        Write-Host "  Uwaga: Excel nie jest zainstalowany lub nie mozna go uruchomic." -ForegroundColor DarkYellow
-        Write-Host "         Pomijam odswiezanie bazy." -ForegroundColor DarkYellow
-        Write-Host ""
-    }
-}
-
-# --- Step 3: Find available port ---
-Write-Host "  [2/3] Uruchamiam serwer lokalny..." -ForegroundColor Yellow
-
+# --- Find available port ---
 $port = $null
 foreach ($candidate in $portCandidates) {
     try {
-        $testListener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $candidate)
-        $testListener.Start()
-        $testListener.Stop()
+        $test = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $candidate)
+        $test.Start()
+        $test.Stop()
         $port = $candidate
         break
-    } catch {
-        continue
-    }
+    } catch { continue }
 }
 
 if ($null -eq $port) {
-    Write-Host "  BLAD: Porty 3000-3004 sa zajete." -ForegroundColor Red
-    Write-Host "  Zamknij inne programy i sprobuj ponownie." -ForegroundColor Red
-    Write-Host ""
-    Read-Host "  Nacisnij Enter aby zamknac"
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.MessageBox]::Show(
+        "Porty 3000-3004 sa zajete.`nZamknij inne programy i sprobuj ponownie.",
+        "Konwerter Szkolen - Blad",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Error
+    ) | Out-Null
     exit 1
 }
 
-# --- Step 4: Start HTTP server ---
+# --- Start HTTP server ---
 $listener = New-Object System.Net.HttpListener
-$prefix = "http://localhost:$port/"
-$listener.Prefixes.Add($prefix)
+$listener.Prefixes.Add("http://localhost:$port/")
 
 try {
     $listener.Start()
 } catch {
-    Write-Host "  BLAD: Nie mozna uruchomic serwera na porcie $port." -ForegroundColor Red
-    Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host ""
-    Read-Host "  Nacisnij Enter aby zamknac"
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.MessageBox]::Show(
+        "Nie mozna uruchomic serwera.`n$($_.Exception.Message)",
+        "Konwerter Szkolen - Blad",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Error
+    ) | Out-Null
     exit 1
 }
 
-# --- Step 5: Open browser ---
-Write-Host "  [3/3] Otwieram przegladarke..." -ForegroundColor Yellow
+# --- Open browser ---
 Start-Process "http://localhost:$port"
 
-Write-Host ""
-Write-Host "  ======================================" -ForegroundColor Green
-Write-Host "    Aplikacja dziala!" -ForegroundColor Green
-Write-Host "    http://localhost:$port" -ForegroundColor Green
-Write-Host "  ======================================" -ForegroundColor Green
-Write-Host ""
-Write-Host "  Zamknij to okno aby zakonczyc aplikacje." -ForegroundColor Gray
-Write-Host ""
-
-# --- Request handling loop ---
+# --- Serve requests until process is killed ---
 try {
     while ($listener.IsListening) {
         $context = $listener.GetContext()
-        $request = $context.Request
         $response = $context.Response
 
-        $urlPath = $request.Url.LocalPath
-        if ($urlPath -eq "/") {
-            $urlPath = "/index.html"
-        }
+        $urlPath = $context.Request.Url.LocalPath
+        if ($urlPath -eq "/") { $urlPath = "/index.html" }
 
-        # Map URL to file path
         $filePath = Join-Path $distPath ($urlPath.TrimStart("/").Replace("/", "\"))
         $filePath = [System.IO.Path]::GetFullPath($filePath)
 
-        # Security: ensure path is within dist/
-        if (-not $filePath.StartsWith($distPath)) {
-            $filePath = $indexPath
-        }
-
-        # SPA fallback: if file not found, serve index.html
-        if (-not (Test-Path $filePath -PathType Leaf)) {
-            $filePath = $indexPath
-        }
+        if (-not $filePath.StartsWith($distPath)) { $filePath = $indexPath }
+        if (-not (Test-Path $filePath -PathType Leaf)) { $filePath = $indexPath }
 
         $extension = [System.IO.Path]::GetExtension($filePath).ToLower()
-        $contentType = Get-MimeType $extension
+        $response.ContentType = Get-MimeType $extension
 
         try {
-            $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
-            $response.ContentType = $contentType
-            $response.ContentLength64 = $fileBytes.Length
+            $bytes = [System.IO.File]::ReadAllBytes($filePath)
+            $response.ContentLength64 = $bytes.Length
             $response.StatusCode = 200
-            $response.OutputStream.Write($fileBytes, 0, $fileBytes.Length)
+            $response.OutputStream.Write($bytes, 0, $bytes.Length)
         } catch {
             $response.StatusCode = 500
         } finally {
@@ -214,6 +133,4 @@ try {
 } finally {
     $listener.Stop()
     $listener.Close()
-    Write-Host ""
-    Write-Host "  Serwer zatrzymany." -ForegroundColor Gray
 }
