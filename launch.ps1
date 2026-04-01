@@ -58,39 +58,27 @@ if (Test-Path $xlsxPath) {
     }
 }
 
-# --- Find available port ---
+# --- Start HTTP server (try ports until one works) ---
+$listener = $null
 $port = $null
 foreach ($candidate in $portCandidates) {
     try {
-        $test = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $candidate)
-        $test.Start()
-        $test.Stop()
+        $tryListener = New-Object System.Net.HttpListener
+        $tryListener.Prefixes.Add("http://localhost:$candidate/")
+        $tryListener.Start()
+        $listener = $tryListener
         $port = $candidate
         break
-    } catch { continue }
+    } catch {
+        if ($tryListener) { $tryListener.Close() }
+        continue
+    }
 }
 
-if ($null -eq $port) {
+if ($null -eq $listener) {
     Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.MessageBox]::Show(
         "Porty 3000-3004 sa zajete.`nZamknij inne programy i sprobuj ponownie.",
-        "Konwerter Szkolen - Blad",
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Error
-    ) | Out-Null
-    exit 1
-}
-
-# --- Start HTTP server ---
-$listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add("http://localhost:$port/")
-
-try {
-    $listener.Start()
-} catch {
-    Add-Type -AssemblyName System.Windows.Forms
-    [System.Windows.Forms.MessageBox]::Show(
-        "Nie mozna uruchomic serwera.`n$($_.Exception.Message)",
         "Konwerter Szkolen - Blad",
         [System.Windows.Forms.MessageBoxButtons]::OK,
         [System.Windows.Forms.MessageBoxIcon]::Error
