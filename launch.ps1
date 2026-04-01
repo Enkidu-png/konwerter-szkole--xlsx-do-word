@@ -42,12 +42,8 @@ if (-not (Test-Path $indexPath)) {
     exit 1
 }
 
-# --- Open Excel file and copy xlsx to dist/ for the web app ---
-if (Test-Path $xlsxPath) {
-    Copy-Item $xlsxPath (Join-Path $distPath "baza danych.xlsx") -Force
-    Start-Process $xlsxPath
-} else {
-    # File not in folder — show file picker
+# --- Resolve Excel file path ---
+if (-not (Test-Path $xlsxPath)) {
     Add-Type -AssemblyName System.Windows.Forms
     $dialog = New-Object System.Windows.Forms.OpenFileDialog
     $dialog.Title = "Wybierz plik bazy danych Excel"
@@ -55,8 +51,61 @@ if (Test-Path $xlsxPath) {
     $dialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
 
     if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        Copy-Item $dialog.FileName (Join-Path $distPath "baza danych.xlsx") -Force
-        Start-Process $dialog.FileName
+        $xlsxPath = $dialog.FileName
+    } else {
+        $xlsxPath = $null
+    }
+}
+
+# --- Open Excel, refresh CRM data, wait, save, then copy to dist/ ---
+if ($xlsxPath -and (Test-Path $xlsxPath)) {
+    $excelOk = $false
+    try {
+        $excel = New-Object -ComObject Excel.Application -ErrorAction Stop
+        $excel.Visible = $true
+        $excel.DisplayAlerts = $false
+
+        try {
+            $workbook = $excel.Workbooks.Open($xlsxPath)
+            $workbook.RefreshAll()
+
+            # Wait for all async queries (CRM sync + possible auth popup)
+            $waited = 0
+            while ($waited -lt 120) {
+                try {
+                    $excel.CalculateUntilAsyncQueriesDone()
+                    break
+                } catch {
+                    Start-Sleep -Seconds 2
+                    $waited += 2
+                }
+            }
+
+            # Save so the refreshed data is on disk
+            $workbook.Save()
+            $excelOk = $true
+        } catch {
+            # File might already be open — try to copy as-is
+        }
+
+        # Release COM but keep Excel open for the user
+        if ($workbook) { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($workbook) | Out-Null }
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
+        $workbook = $null
+        $excel = $null
+    } catch {
+        # Excel not installed — copy file as-is
+    }
+
+    # Copy (refreshed) xlsx to dist/ for the web app
+    try {
+        Copy-Item $xlsxPath (Join-Path $distPath "baza danych.xlsx") -Force
+    } catch {
+        # File locked — try shadow copy via byte read
+        try {
+            $bytes = [System.IO.File]::ReadAllBytes($xlsxPath)
+            [System.IO.File]::WriteAllBytes((Join-Path $distPath "baza danych.xlsx"), $bytes)
+        } catch {}
     }
 }
 
