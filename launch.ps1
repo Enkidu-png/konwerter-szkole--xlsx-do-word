@@ -57,53 +57,33 @@ if (-not (Test-Path $xlsxPath)) {
     }
 }
 
-# --- Open Excel, refresh CRM data, wait, save, then copy to dist/ ---
+# --- Open Excel normally (like double-click), wait for user, then copy ---
 if ($xlsxPath -and (Test-Path $xlsxPath)) {
-    $excelOk = $false
-    try {
-        $excel = New-Object -ComObject Excel.Application -ErrorAction Stop
-        $excel.Visible = $true
-        $excel.DisplayAlerts = $false
+    # Open file exactly like double-click — triggers all auto-refresh settings
+    Start-Process $xlsxPath
 
-        try {
-            $workbook = $excel.Workbooks.Open($xlsxPath)
-            $workbook.RefreshAll()
+    # Ask user to confirm when Excel is done refreshing
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.MessageBox]::Show(
+        "Excel otworzyl baze danych.`n`n" +
+        "1. Jesli pojawilo sie okno logowania — zaloguj sie.`n" +
+        "2. Poczekaj az dane sie odswierza.`n" +
+        "3. Zapisz plik (Ctrl+S).`n`n" +
+        "Gdy dane beda gotowe, kliknij OK.",
+        "Konwerter Szkolen",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Information
+    ) | Out-Null
 
-            # Wait for all async queries (CRM sync + possible auth popup)
-            $waited = 0
-            while ($waited -lt 120) {
-                try {
-                    $excel.CalculateUntilAsyncQueriesDone()
-                    break
-                } catch {
-                    Start-Sleep -Seconds 2
-                    $waited += 2
-                }
-            }
-
-            # Save so the refreshed data is on disk
-            $workbook.Save()
-            $excelOk = $true
-        } catch {
-            # File might already be open — try to copy as-is
-        }
-
-        # Release COM but keep Excel open for the user
-        if ($workbook) { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($workbook) | Out-Null }
-        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
-        $workbook = $null
-        $excel = $null
-    } catch {
-        # Excel not installed — copy file as-is
-    }
-
-    # Copy (refreshed) xlsx to dist/ for the web app
+    # Copy the (now refreshed & saved) xlsx to dist/ for the web app
     try {
         Copy-Item $xlsxPath (Join-Path $distPath "baza danych.xlsx") -Force
     } catch {
-        # File locked — try shadow copy via byte read
         try {
-            $bytes = [System.IO.File]::ReadAllBytes($xlsxPath)
+            $stream = [System.IO.File]::Open($xlsxPath, 'Open', 'Read', 'ReadWrite')
+            $bytes = New-Object byte[] $stream.Length
+            $stream.Read($bytes, 0, $stream.Length) | Out-Null
+            $stream.Close()
             [System.IO.File]::WriteAllBytes((Join-Path $distPath "baza danych.xlsx"), $bytes)
         } catch {}
     }
