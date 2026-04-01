@@ -6,8 +6,7 @@
 # --- Configuration ---
 $distPath = Join-Path $PSScriptRoot "dist"
 $xlsxFileName = "baza danych.xlsx"
-$desktopPath = [Environment]::GetFolderPath("Desktop")
-$xlsxPath = Join-Path $desktopPath $xlsxFileName
+$xlsxPath = Join-Path $PSScriptRoot $xlsxFileName
 $portCandidates = @(3000, 3001, 3002, 3003, 3004)
 
 # --- MIME Types ---
@@ -58,11 +57,26 @@ if (-not (Test-Path $indexPath)) {
 Write-Host "  [1/3] Otwieram baze danych w Excel..." -ForegroundColor Yellow
 
 if (-not (Test-Path $xlsxPath)) {
-    Write-Host "  Uwaga: Nie znaleziono pliku '$xlsxFileName' na Pulpicie." -ForegroundColor DarkYellow
-    Write-Host "         Oczekiwana sciezka: $xlsxPath" -ForegroundColor DarkYellow
-    Write-Host "         Pomijam odswiezanie bazy." -ForegroundColor DarkYellow
+    Write-Host "  Nie znaleziono '$xlsxFileName' w folderze aplikacji." -ForegroundColor DarkYellow
+    Write-Host "  Otwieram okno wyboru pliku..." -ForegroundColor Yellow
     Write-Host ""
-} else {
+
+    Add-Type -AssemblyName System.Windows.Forms
+    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Title = "Wybierz plik bazy danych Excel"
+    $dialog.Filter = "Pliki Excel (*.xlsx;*.xls)|*.xlsx;*.xls"
+    $dialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
+
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $xlsxPath = $dialog.FileName
+    } else {
+        Write-Host "  Nie wybrano pliku. Pomijam odswiezanie bazy." -ForegroundColor DarkYellow
+        Write-Host ""
+        $xlsxPath = $null
+    }
+}
+
+if ($xlsxPath -and (Test-Path $xlsxPath)) {
     try {
         $excel = New-Object -ComObject Excel.Application -ErrorAction Stop
         $excel.Visible = $true
