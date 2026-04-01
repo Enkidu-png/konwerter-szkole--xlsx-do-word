@@ -42,8 +42,9 @@ if (-not (Test-Path $indexPath)) {
     exit 1
 }
 
-# --- Open Excel file (Excel auto-refreshes on open) ---
+# --- Open Excel file and copy xlsx to dist/ for the web app ---
 if (Test-Path $xlsxPath) {
+    Copy-Item $xlsxPath (Join-Path $distPath "baza danych.xlsx") -Force
     Start-Process $xlsxPath
 } else {
     # File not in folder — show file picker
@@ -54,6 +55,7 @@ if (Test-Path $xlsxPath) {
     $dialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
 
     if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        Copy-Item $dialog.FileName (Join-Path $distPath "baza danych.xlsx") -Force
         Start-Process $dialog.FileName
     }
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Upload, FileText, Download, Copy, Check, Search, Trash2, Info, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -222,6 +222,77 @@ export default function App() {
     return response.arrayBuffer();
   };
 
+  const parseExcelBinary = (bstr: string | ArrayBuffer) => {
+    try {
+      const wb = XLSX.read(bstr, { type: typeof bstr === 'string' ? 'binary' : 'array' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+      if (rows.length < 2) return;
+
+      const headers = rows[0];
+      const dataRows = rows.slice(1);
+
+      const parsedProducts: TrainingProduct[] = dataRows.map((row, index) => {
+        const searchHeaders = headers.map((h: any) => String(h || '').toLowerCase());
+
+        const titleIndex = 5;
+
+        let descIndex = searchHeaders.findIndex((h, i) => i >= 2 && h.includes('opis'));
+        let scopeIndex = searchHeaders.findIndex((h, i) => i >= 2 && h.includes('zakres'));
+
+        if (descIndex === -1) descIndex = 5;
+        if (scopeIndex === -1) scopeIndex = 6;
+
+        const title = String(row[titleIndex] || 'Bez nazwy').trim();
+        const code = String(row[3] || '').trim();
+        const identifier = String(row[4] || '').trim();
+        const description = String(row[descIndex] || '').trim();
+        const scope = String(row[scopeIndex] || '').trim();
+
+        const displayName = identifier ? `[${identifier}] ${title}` : title;
+
+        const extraData: { label: string; value: string }[] = [];
+        for (let i = 23; i <= 28; i++) {
+          const val = row[i];
+          if (val !== undefined && val !== null) {
+            const strVal = String(val).trim();
+            if (strVal && strVal !== 'undefined' && strVal !== 'null') {
+              const label = headers[i] || `Kolumna ${XLSX.utils.encode_col(i)}`;
+              extraData.push({ label, value: strVal });
+            }
+          }
+        }
+
+        return {
+          id: `prod-${index}`,
+          code,
+          identifier,
+          title,
+          name: displayName,
+          description,
+          scope,
+          extraData,
+          rawData: row
+        };
+      });
+
+      setProducts(parsedProducts.filter(p => p.title !== 'Bez nazwy' || p.identifier !== ''));
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error("Error parsing Excel:", err);
+    }
+  };
+
+  // Auto-load "baza danych.xlsx" from server on startup
+  useEffect(() => {
+    fetch('/baza%20danych.xlsx')
+      .then(res => { if (res.ok) return res.arrayBuffer(); throw new Error('not found'); })
+      .then(buf => parseExcelBinary(buf))
+      .catch(() => {}); // file not available — user can still drag-drop
+  }, []);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
     let file: File | undefined;
     if ('files' in e.target && e.target.files) {
@@ -234,68 +305,8 @@ export default function App() {
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-        if (rows.length < 2) return;
-
-        const headers = rows[0];
-        const dataRows = rows.slice(1);
-
-        const parsedProducts: TrainingProduct[] = dataRows.map((row, index) => {
-          const searchHeaders = headers.map((h: any) => String(h || '').toLowerCase());
-
-          const titleIndex = 5;
-
-          let descIndex = searchHeaders.findIndex((h, i) => i >= 2 && h.includes('opis'));
-          let scopeIndex = searchHeaders.findIndex((h, i) => i >= 2 && h.includes('zakres'));
-
-          if (descIndex === -1) descIndex = 5;
-          if (scopeIndex === -1) scopeIndex = 6;
-
-          const title = String(row[titleIndex] || 'Bez nazwy').trim();
-          const code = String(row[3] || '').trim();
-          const identifier = String(row[4] || '').trim();
-          const description = String(row[descIndex] || '').trim();
-          const scope = String(row[scopeIndex] || '').trim();
-
-          const displayName = identifier ? `[${identifier}] ${title}` : title;
-
-          const extraData: { label: string; value: string }[] = [];
-          for (let i = 23; i <= 28; i++) {
-            const val = row[i];
-            if (val !== undefined && val !== null) {
-              const strVal = String(val).trim();
-              if (strVal && strVal !== 'undefined' && strVal !== 'null') {
-                const label = headers[i] || `Kolumna ${XLSX.utils.encode_col(i)}`;
-                extraData.push({ label, value: strVal });
-              }
-            }
-          }
-
-          return {
-            id: `prod-${index}`,
-            code,
-            identifier,
-            title,
-            name: displayName,
-            description,
-            scope,
-            extraData,
-            rawData: row
-          };
-        });
-
-        setProducts(parsedProducts.filter(p => p.title !== 'Bez nazwy' || p.identifier !== ''));
-        setSelectedIds(new Set());
-      } catch (err) {
-        console.error("Error parsing Excel:", err);
-        alert("Błąd podczas odczytu pliku Excel. Upewnij się, że plik jest poprawny.");
-      }
+      const bstr = evt.target?.result;
+      if (bstr) parseExcelBinary(bstr);
     };
     reader.readAsBinaryString(file);
   };
