@@ -1,10 +1,9 @@
-# launch.ps1 — Silent launcher for Konwerter Szkolen
-# Opens "baza danych.xlsx" (Excel auto-refreshes), starts hidden HTTP server, opens browser.
+# launch.ps1 — HTTP server for Konwerter Szkolen
+# Serves dist/ folder and opens browser. Excel is handled by Uruchom.vbs.
 
 $distPath = Join-Path $PSScriptRoot "dist"
 $indexPath = Join-Path $distPath "index.html"
-$xlsxPath = Join-Path $PSScriptRoot "baza danych.xlsx"
-$portCandidates = @(3000, 3001, 3002, 3003, 3004)
+$portCandidates = @(4000, 4001, 4002, 4003, 4004)
 
 $mimeTypes = @{
     ".html"  = "text/html; charset=utf-8"
@@ -40,53 +39,6 @@ if (-not (Test-Path $indexPath)) {
         [System.Windows.Forms.MessageBoxIcon]::Error
     ) | Out-Null
     exit 1
-}
-
-# --- Resolve Excel file path ---
-if (-not (Test-Path $xlsxPath)) {
-    Add-Type -AssemblyName System.Windows.Forms
-    $dialog = New-Object System.Windows.Forms.OpenFileDialog
-    $dialog.Title = "Wybierz plik bazy danych Excel"
-    $dialog.Filter = "Pliki Excel (*.xlsx;*.xls)|*.xlsx;*.xls"
-    $dialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
-
-    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $xlsxPath = $dialog.FileName
-    } else {
-        $xlsxPath = $null
-    }
-}
-
-# --- Open Excel normally (like double-click), wait for user, then copy ---
-if ($xlsxPath -and (Test-Path $xlsxPath)) {
-    # Open file exactly like double-click — triggers all auto-refresh settings
-    Start-Process $xlsxPath
-
-    # Ask user to confirm when Excel is done refreshing
-    Add-Type -AssemblyName System.Windows.Forms
-    [System.Windows.Forms.MessageBox]::Show(
-        "Excel otworzyl baze danych.`n`n" +
-        "1. Jesli pojawilo sie okno logowania — zaloguj sie.`n" +
-        "2. Poczekaj az dane sie odswierza.`n" +
-        "3. Zapisz plik (Ctrl+S).`n`n" +
-        "Gdy dane beda gotowe, kliknij OK.",
-        "Konwerter Szkolen",
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Information
-    ) | Out-Null
-
-    # Copy the (now refreshed & saved) xlsx to dist/ for the web app
-    try {
-        Copy-Item $xlsxPath (Join-Path $distPath "baza danych.xlsx") -Force
-    } catch {
-        try {
-            $stream = [System.IO.File]::Open($xlsxPath, 'Open', 'Read', 'ReadWrite')
-            $bytes = New-Object byte[] $stream.Length
-            $stream.Read($bytes, 0, $stream.Length) | Out-Null
-            $stream.Close()
-            [System.IO.File]::WriteAllBytes((Join-Path $distPath "baza danych.xlsx"), $bytes)
-        } catch {}
-    }
 }
 
 # --- Start HTTP server (try ports until one works) ---

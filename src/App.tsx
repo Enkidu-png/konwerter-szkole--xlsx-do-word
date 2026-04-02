@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileText, Download, Copy, Check, Search, Trash2, Info, UserCheck } from 'lucide-react';
+import { Upload, FileText, Download, Copy, Check, Search, RefreshCw, Info, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { saveAs } from 'file-saver';
 import PizZip from 'pizzip';
@@ -215,6 +215,7 @@ export default function App() {
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [isGeneratingOffer, setIsGeneratingOffer] = useState(false);
   const [selectedFooter, setSelectedFooter] = useState<FooterKey | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const loadFooterBuffer = async (key: FooterKey): Promise<ArrayBuffer> => {
     const response = await fetch(`/Stopka_${key}.docx`);
@@ -285,13 +286,17 @@ export default function App() {
     }
   };
 
-  // Auto-load "baza danych.xlsx" from server on startup
-  useEffect(() => {
-    fetch('/baza%20danych.xlsx')
+  const loadFromServer = (showSpinner = false) => {
+    if (showSpinner) setIsSyncing(true);
+    fetch('/baza%20danych.xlsx', { cache: 'no-store' })
       .then(res => { if (res.ok) return res.arrayBuffer(); throw new Error('not found'); })
       .then(buf => parseExcelBinary(buf))
-      .catch(() => {}); // file not available — user can still drag-drop
-  }, []);
+      .catch(() => {})
+      .finally(() => { if (showSpinner) setIsSyncing(false); });
+  };
+
+  // Auto-load "baza danych.xlsx" from server on startup
+  useEffect(() => { loadFromServer(); }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
     let file: File | undefined;
@@ -486,11 +491,12 @@ export default function App() {
           </div>
           {products.length > 0 && (
             <button
-              onClick={() => { setProducts([]); setSelectedProduct(null); setSelectedIds(new Set()); }}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              disabled={isSyncing}
+              onClick={() => { setSelectedProduct(null); setSelectedIds(new Set()); loadFromServer(true); }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
             >
-              <Trash2 size={18} />
-              Wyczyść bazę
+              <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+              {isSyncing ? 'Synchronizowanie...' : 'Synchronizuj dane'}
             </button>
           )}
         </header>
